@@ -1,0 +1,55 @@
+#lang plait
+
+(define-type Expr
+  (num [n : Number])
+  (id [x : Symbol])
+  (bool [b : Boolean])
+  (bin-num-op [op : (Number Number -> Number)] [lhs : Expr] [rhs : Expr])
+  (iszero [e : Expr])
+  (bif [test : Expr] [then : Expr] [else : Expr])
+  (with [bound-x : Symbol] [bound-body : Expr] [body : Expr])
+  (fun [arg-x : Symbol]
+       [arg-type : Type]
+       [body : Expr]
+       [body-type : Type])
+  (app [fun : Expr] [arg : Expr])
+  (nempty)
+  (ncons [first : Expr] [rest : Expr])
+  (nfirst [e : Expr])
+  (nrest [e : Expr])
+  (isnempty [e : Expr]))
+
+(define-type Type
+  (t-num)
+  (t-bool)
+  (t-nlist)
+  (t-fun [arg : Type] [result : Type]))
+
+(define (getArg sexp n) (list-ref (s-exp->list sexp) n))
+(define (parseNth sexp n) (parse (getArg sexp n)))
+(define (getSymbol expr) (s-exp->symbol (list-ref (s-exp->list expr) 0)))
+(define (getBoundExpr expr ) (list-ref (s-exp->list expr) 1))
+
+(define (plus x y) (+ x y))
+(define (minus x y) (- x y))
+(define (mult x y) (* x y))
+
+(define (parse expr)
+  (cond
+    [(s-exp-match? `NUMBER expr ) (num (s-exp->number expr))]
+    [(s-exp-match? `(+ ANY ANY) expr) (bin-num-op plus (parse (getArg expr 1) ) (parse (getArg expr 2)) )  ]
+    [(s-exp-match? `(* ANY ANY) expr) (bin-num-op mult (parse (getArg expr 1) ) (parse (getArg expr 2)) ) ]
+    [(s-exp-match? `(- ANY ANY) expr) (bin-num-op minus (parse (getArg expr 1) ) (parse (getArg expr 2)) ) ]
+    [(s-exp-match? `(zero? ANY) expr) (iszero (parseNth expr 1))]
+    [(s-exp-match? `(if ANY ANY ANY) expr) (bif (parseNth expr 1) (parseNth expr 2) (parseNth expr 3))]
+    [(s-exp-match? `(with (SYMBOL ANY) ANY) expr) (with (getSymbol (getArg expr 1))  (parse (getBoundExpr (getArg expr 1)))  (parseNth expr 2) )]
+    [(s-exp-match? `SYMBOL expr) (id (s-exp->symbol expr))]
+    [else (begin (display expr)
+                 (error 'parse "Not in our language"))]))
+
+(parse `(+ 1 2))
+(parse `(with (x 3) (+ 1 2)))
+
+
+
+
