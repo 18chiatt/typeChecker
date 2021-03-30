@@ -1,5 +1,5 @@
 #lang plait
-
+(print-only-errors #t)
 (define-type Expr
   (num [n : Number])
   (id [x : Symbol])
@@ -44,9 +44,8 @@
     [(s-exp-match? `boolean expr) (t-bool)]
     [(s-exp-match? `nlist expr) (t-nlist)]
     [(s-exp-match? `(ANY -> ANY) expr) (t-fun (parseType (getArg expr 0)) (parseType (getArg expr 2)))]
-    [else (begin
-            (display expr)
-            (error 'parse "Unable to identify type"))]))
+    [else 
+            (error 'parse (string-append "Unable to identify type" (to-string expr)))]))
 
 
 (define (plus x y) (+ x y))
@@ -58,7 +57,7 @@
     [(s-exp-match? `NUMBER expr ) (num (s-exp->number expr))]
     [(s-exp-match? `true expr) (bool #t)]
     [(s-exp-match? `false expr) (bool #f)]
-    [(s-exp-match? `null expr) (nempty)]
+    [(s-exp-match? `empty expr) (nempty)]
     [(s-exp-match? `(+ ANY ANY) expr) (bin-num-op plus (parse (getArg expr 1) ) (parse (getArg expr 2)) )  ]
     [(s-exp-match? `(* ANY ANY) expr) (bin-num-op mult (parse (getArg expr 1) ) (parse (getArg expr 2)) ) ]
     [(s-exp-match? `(- ANY ANY) expr) (bin-num-op minus (parse (getArg expr 1) ) (parse (getArg expr 2)) ) ]
@@ -73,19 +72,16 @@
     [(s-exp-match? `(rest ANY) expr) (nrest (parseNth expr 1))]
     [(s-exp-match? `(ANY ANY) expr) (app (parseNth expr 0) (parseNth expr 1))]
     
-    [else (begin (display expr)
-                 (error 'parse "Not in our language"))]))
+    [else 
+                 (error 'parse (string-append (to-string expr) "Not in our language"))]))
 
-(parse `(+ 1 2))
-(parse `(with (x 3) (+ 1 2)))
-(parse `false)
-(parse `(fun (x : number) : boolean (+ x x)))
 
-(parse `( (fun ( x : number) : number (+ x x) )  (+ 3 5) ))
+
+
 
 (define (lookup env symbol)
   (type-case Gamma env
-    [(mtEnv) (error 'typeCheck "Unable to find type of thing")]
+    [(mtEnv) (error 'typeCheck (string-append "Unable to find type of " (to-string symbol) ))]
     [(notMtEnv id type rest) (cond
                                [(equal? id symbol) type]
                                [else (lookup rest symbol)])]))
@@ -95,7 +91,7 @@
 (define (typeAssert expr env expected)
   (cond
     [(equal? expected (type-of expr env))void ]
-    [else (begin (display "Expected ") (display expected) (display " got ") (display (type-of expr env) )(error 'type "Unexpected type!") )]))
+    [else  (error 'type (string-append "Expected " (string-append (to-string expected ) (string-append " but got " (to-string (type-of expr env) ))))) ]))
 
 (define (getArgType fun env)
   (type-case Type (type-of fun env)
@@ -131,13 +127,75 @@
 
 (define (full expr) (type-of (parse expr) (mtEnv)))
 
-(full `1)
-(test/exn (full `(fun (x : number) : number (zero? x))) "Unexp")
-(test/exn (full `(cons 3 (cons false null))) "Unexp")
+(test/exn (full `(fun (x : number) : number (zero? x))) "")
+(test/exn (full `(cons 3 (cons false empty))) "Expected")
+(test/exn (full `(fun (x : nlist) : nlist (empty? x))) "")
+(test/exn (full `(full `(fun (x : (number -> number)) : (number -> number) (x 3))  )) "")
+(test/exn (full `(fun (x : ( number -> number )) : number (x x))) "")
+(test/exn (full `(if (zero? 3) 4 empty)) "")
+(test/exn (full `(if 3 4 5)) "")
+(test/exn (full `(if empty 4 5)) "")
+(test/exn (full `(with (id : boolean) (if true id 3))) "")
+(test/exn (full `(cons 3 (cons true empty))) "")
+(test/exn (full `(cons 3 true)) "")
+(test/exn (full `(zero? (rest empty))) "")
+(test/exn (full `(* true true)) "")
+(test/exn (full `gla) "")
+(test/exn (full `(3 5)) "")
+(test/exn (full `(if false (fun (x : number) : number x) 5)) "")
+(test/exn (full `(if (zero? (with (x 5) x)) (fun (x : number) : number x) (fun (x : boolean) : number (+ x 1)))) "")
+(test/exn (full `(if (zero? (with (x true) x)) (fun (x : number) : number x) (fun (x : number) : number (+ x 1)))) "")
+(test/exn (full `(if (zero? (with (x 5) x)) (fun (x : boolean) : number x) (fun (x : number) : number (+ x 1)))) "")
+(test/exn (full `(if (zero? (with (x 5) x)) (fun (x : number) : number x) 3)) "")
+(test/exn (full `(if ((fun (x : nlist ) : boolean x) empty) 3 5)) "")
+(test/exn (full `(if ((fun (x : nlist ) : number (rest x)) empty) 3 5)) "")
+(test/exn (full `(if ((fun (x : nlist ) : nlist (first x)) empty) 3 5)) "")
+;(test/exn (full `()) "")
 
 
-(full `(first null))
-(full `(rest null))
+(test (full `3) (t-num))
+(test (full`(+ 3 3)) (t-num )   )
+(test (full`(* 3 3) )(t-num )   )
+(test (full`(zero? 3) )( t-bool)   )
+(test (full`((fun (x : number) : boolean (zero? x)) 3)) (t-bool )   )
+(test (full`((fun (x : (number -> number)) : number (x 3)) (fun (x : number) : number (+ x 1))  )) (t-num )   )
+(test (full` (with (bad  empty) bad) ) (t-nlist )   )
+
+(test (full `(fun (x : (number -> number)) : (number -> number) x)  ) (t-fun (t-fun (t-num) (t-num)) (t-fun (t-num) (t-num)))) ;function from a function from number to number to a different function from num -> num
+(test (full `(fun (x : ( number -> number )) : number (x 3))  ) (t-fun (t-fun (t-num) (t-num)) (t-num)))
+
+(test (full `(first empty)) (t-num))
+
+(test (full `(cons 3 empty))   (t-nlist))
+(test (full `(rest empty))   (t-nlist))
+(test (full `(empty? empty))   (t-bool))
+(test (full `(with (x 3) (+ x x)))   (t-num))
+(test (full `((fun (x : number) : number (+ 1 x)) 1) )  (t-num)) 
+(test (full `(if (zero? 3) 4 5))   (t-num))
+
+
+
+(test (full `(cons 3 empty))   (t-nlist))
+(test (full `(rest empty))   (t-nlist))
+(test (full `(rest (cons 3 empty)))   (t-nlist))
+(test (full `empty)   (t-nlist))
+(test (full `( (fun (x : nlist) : number (first x)) empty ))   (t-num))
+(test (full `( with (g empty) g))   (t-nlist))
+(test (full `( with (g (fun (x : number) : number (+ x x))) (g 3) ))   (t-num))
+(test (full `(zero? ( (fun (x : number) : number x) 3)))   (t-bool))
+(test (full `(if false 68 10))   (t-num))
+(test (full `(empty? empty))   (t-bool))
+(test (full `(fun (x : boolean) : number 3) )   (t-fun (t-bool) (t-num)))
+(test (full `((fun (x : boolean) : number 6) true))   (t-num))
+(test (full `(fun (x : nlist) : boolean (empty? x)))   (t-fun (t-nlist) (t-bool)))
+(test (full `(if ((fun (x : nlist ) : boolean true) empty) 3 5) )   (t-num))
+(test (full `(if (zero? (with (x 5) x)) (fun (x : number) : number x) (fun (x : number) : number (+ x 1))))   (t-fun (t-num) (t-num)))
+;(test (full `())   ())
+;(test (full `())   ())
+;(test (full `())   ())
+;(test (full `())   ())
+
+
 
 
 
