@@ -150,6 +150,12 @@
 (test/exn (full `(if ((fun (x : nlist ) : boolean x) empty) 3 5)) "")
 (test/exn (full `(if ((fun (x : nlist ) : number (rest x)) empty) 3 5)) "")
 (test/exn (full `(if ((fun (x : nlist ) : nlist (first x)) empty) 3 5)) "")
+(test/exn (full `(+ 3 true)) "")
+(test/exn (full `(cons false empty)) "")
+(test/exn (full `(if empty 3 5)) "")
+(test/exn (full `(3 (fun (x : number): number x))) "")
+(test/exn (full `((fun (x : boolean) : boolean x) 3)) "")
+(test/exn (full `(with (x 6) ((fun (x : boolean) : boolean x) x))) "")
 ;(test/exn (full `()) "")
 
 
@@ -190,9 +196,12 @@
 (test (full `(fun (x : nlist) : boolean (empty? x)))   (t-fun (t-nlist) (t-bool)))
 (test (full `(if ((fun (x : nlist ) : boolean true) empty) 3 5) )   (t-num))
 (test (full `(if (zero? (with (x 5) x)) (fun (x : number) : number x) (fun (x : number) : number (+ x 1))))   (t-fun (t-num) (t-num)))
-;(test (full `())   ())
-;(test (full `())   ())
-;(test (full `())   ())
+(test (full `(if (empty? (rest empty)) 3 ((fun (x : number) : number x) 3)))   (t-num))
+(test (full `(if ((fun (z : number) : boolean (zero? z)) 3) true false))   (t-bool))
+(test (full `empty)   (t-nlist))
+(test (full `(cons ((fun (x : boolean) : number (if x 3 56)) false) empty))   (t-nlist))
+(test (full `(with (x true) (if x (fun (x : number) : boolean (zero? x)) (fun (x : number) : boolean (zero? (+ x 1))))))   (t-fun (t-num) (t-bool)))
+
 ;(test (full `())   ())
 
 
